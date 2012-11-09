@@ -58,6 +58,9 @@ my $copySourceObject;
 my $copySourceRange;
 my $postBody;
 my $calculateContentMD5 = 0;
+my $print;
+my $expires;
+my $endpoint;
 
 my $DOTFILENAME=".s3curl";
 my $EXECFILE=$FindBin::Bin;
@@ -97,6 +100,9 @@ GetOptions(
     'help' => \$help,
     'debug' => \$debug,
     'calculateContentMd5' => \$calculateContentMD5,
+    'print' => \$print,
+    'expires=s' => \$expires,
+    'endpoint:s' => \$endpoint,
 );
 
 my $usage = <<USAGE;
@@ -114,6 +120,11 @@ Usage $0 --id friendly-name (or AWSAccessKeyId) [options] -- [curl-options] [URL
   --createBucket [<region>]   create-bucket with optional location constraint
   --head                      HEAD request
   --debug                     enable debug logging
+  --print                     print command instead of executing it
+  --expires                   Generate a signed url that expiers, specified as
+                              the number of seconds since the epoch or +seconds
+                              for a expire +seconds in the future
+  --endpoint                  S3 endpoint
  common curl options:
   -H 'x-amz-acl: public-read' another way of using canned ACLs
   -v                          verbose logging
@@ -171,6 +182,11 @@ my %xamzHeaders;
 $xamzHeaders{'x-amz-acl'}=$acl if (defined $acl);
 $xamzHeaders{'x-amz-copy-source'}=$copySourceObject if (defined $copySourceObject);
 $xamzHeaders{'x-amz-copy-source-range'}="bytes=$copySourceRange" if (defined $copySourceRange);
+
+if (defined($endpoint)) {
+    unshift @endpoints, $endpoint;
+    debug("set endpoint: @endpoints");
+}
 
 # try to understand curl args
 for (my $i=0; $i<@ARGV; $i++) {
