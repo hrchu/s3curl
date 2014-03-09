@@ -267,6 +267,9 @@ if (defined $createBucket) {
     # is specified in the header
     push @args, ("-X", "PUT");
     push @args, ("-H", "x-amz-copy-source: $copySourceObject");
+    if (defined $copySourceRange) {
+       push @args, ("-H", "x-amz-copy-source-range: bytes=$copySourceRange");
+    }
 } elsif (defined $postBody) {
     if (length($postBody)>0) {
         push @args, ("-T", $postBody);
