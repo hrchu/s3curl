@@ -2,13 +2,13 @@
 
 # Copyright 2006-2010 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"). You may not use this
+# Licensed under the Apache License, Version 2.0 (the "License"). You may not use this 
 # file except in compliance with the License. A copy of the License is located at
 #
 #     http://aws.amazon.com/apache2.0/
 #
-# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License 
 # for the specific language governing permissions and limitations under the License.
 
 use strict;
@@ -22,6 +22,7 @@ use Digest::MD5;
 use FindBin;
 use MIME::Base64 qw(encode_base64);
 use Getopt::Long qw(GetOptions);
+use URI::Escape;
 
 use constant STAT_MODE => 2;
 use constant STAT_UID => 4;
@@ -58,6 +59,8 @@ my $copySourceObject;
 my $copySourceRange;
 my $postBody;
 my $calculateContentMD5 = 0;
+my $print;
+my $expires;
 
 my $DOTFILENAME=".s3curl";
 my $EXECFILE=$FindBin::Bin;
@@ -98,6 +101,8 @@ GetOptions(
     'help' => \$help,
     'debug' => \$debug,
     'calculateContentMd5' => \$calculateContentMD5,
+    'print' => \$print,
+    'expires=s' => \$expires,
 );
 
 my $usage = <<USAGE;
@@ -115,6 +120,10 @@ Usage $0 --id friendly-name (or AWSAccessKeyId) [options] -- [curl-options] [URL
   --createBucket [<region>]   create-bucket with optional location constraint
   --head                      HEAD request
   --debug                     enable debug logging
+  --print                     print command instead of executing it
+  --expires                   Generate a signed url that expiers, specified as
+                              the number of seconds since the epoch or +seconds
+                              for a expire +seconds in the future
  common curl options:
   -H 'x-amz-acl: public-read' another way of using canned ACLs
   -v                          verbose logging
@@ -139,7 +148,6 @@ if ($cmdLineSecretKey) {
 if ($contentMD5 && $calculateContentMD5) {
     die "cannot specify both --contentMd5 and --calculateContentMd5";
 }
-
 
 my $method = "";
 if (defined $fileToPut or defined $createBucket or defined $copySourceObject) {
@@ -206,10 +214,10 @@ for (my $i=0; $i<@ARGV; $i++) {
     }
     elsif ($arg =~ /\-X/) {
         # mainly for DELETE
-    $method = $ARGV[++$i];
+	$method = $ARGV[++$i];
     }
     elsif ($arg =~ /\-H/) {
-    my $header = $ARGV[++$i];
+	my $header = $ARGV[++$i];
         #check for host: and x-amz*
         if ($header =~ /^[Hh][Oo][Ss][Tt]:(.+)$/) {
             $host = $1;
@@ -236,20 +244,32 @@ foreach (sort (keys %xamzHeaders)) {
 }
 
 my $httpDate = POSIX::strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime );
-my $stringToSign = "$method\n$contentMD5\n$contentType\n$httpDate\n$xamzHeadersToSign$resource";
+my $stringToSign;
+
+if (defined($expires)) {
+    if ($expires =~ s/^\+//) {
+        $expires = time()+int($expires);
+    }
+    debug("Expires: at $expires");
+    $stringToSign = "$method\n$contentMD5\n$contentType\n$expires\n$xamzHeadersToSign$resource";
+} else {
+    $stringToSign = "$method\n$contentMD5\n$contentType\n$httpDate\n$xamzHeadersToSign$resource";
+}
 
 debug("StringToSign='" . $stringToSign . "'");
 my $hmac = Digest::HMAC_SHA1->new($secretKey);
 $hmac->add($stringToSign);
 my $signature = encode_base64($hmac->digest, "");
-
+debug("signature='" . $signature. "'");
 
 my @args = ();
-push @args, ("-H", "Date: $httpDate");
-push @args, ("-H", "Authorization: AWS $keyId:$signature");
+unless (defined($expires)) {
+    push @args, ("-H", "Date: $httpDate");
+    push @args, ("-H", "Authorization: AWS $keyId:$signature");
+}
 push @args, ("-H", "x-amz-acl: $acl") if (defined $acl);
 push @args, ("-L");
-push @args, ("-H", "content-type: $contentType") if (defined $contentType);
+push @args, ("-H", "content-type: $contentType") if (length $contentType);
 push @args, ("-H", "Content-MD5: $contentMD5") if (length $contentMD5);
 push @args, ("-T", $fileToPut) if (defined $fileToPut);
 push @args, ("-X", "DELETE") if (defined $doDelete);
@@ -276,9 +296,20 @@ if (defined $createBucket) {
     }
 }
 
+if (defined($expires)) {
+    my $url = shift @ARGV;
+    $signature = uri_escape($signature);
+    push @args, ("\'$url?AWSAccessKeyId=$keyId&Signature=$signature&Expires=$expires\'");
+}
+
 push @args, @ARGV;
 
 debug("exec $CURL " . join (" ", @args));
+
+if (defined($print)) {
+    print join(" ", $CURL, @args, "\n");
+    exit(0)
+}
 exec($CURL, @args)  or die "can't exec program: $!";
 
 sub debug {
@@ -296,7 +327,7 @@ sub getResourceToSign {
             debug("vanity endpoint signing case");
             return;
         }
-        elsif ($host eq $ep) {
+        elsif ($host eq $ep) { 
             debug("ordinary endpoint signing case");
             return;
         }
