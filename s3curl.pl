@@ -12,7 +12,7 @@
 # for the specific language governing permissions and limitations under the License.
 
 use strict;
-use POSIX;
+use HTTP::Date;
 
 # you might need to use CPAN to get these modules.
 # run perl -MCPAN -e "install <module>" to get them.
@@ -251,7 +251,7 @@ foreach (sort (keys %xamzHeaders)) {
 }
 
 # NOTE: Need to skip the Date: header, in case x-amz-date got provided
-my $httpDate = (defined $xamzHeaders{'x-amz-date'}) ? '' : POSIX::strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime);
+my $httpDate = (defined $xamzHeaders{'x-amz-date'}) ? '' : time2str();
 my $stringToSign = "$method\n$contentMD5\n$contentType\n$httpDate\n$xamzHeadersToSign$resource";
 
 debug("StringToSign='" . $stringToSign . "'");
