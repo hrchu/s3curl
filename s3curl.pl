@@ -193,7 +193,7 @@ for (my $i=0; $i<@ARGV; $i++) {
             "partNumber", "policy", "requestPayment", "response-cache-control",
             "response-content-disposition", "response-content-encoding", "response-content-language",
             "response-content-type", "response-expires", "torrent",
-            "uploadId", "uploads", "versionId", "versioning", "versions", "website", "lifecycle") {
+            "uploadId", "uploads", "versionId", "versioning", "versions", "website", "lifecycle", "restore") {
             if ($query =~ /(?:^|&)($attribute(?:=[^&]*)?)(?:&|$)/) {
                 push @attributes, uri_unescape($1);
             }
@@ -214,7 +214,7 @@ for (my $i=0; $i<@ARGV; $i++) {
         if ($header =~ /^[Hh][Oo][Ss][Tt]:(.+)$/) {
             $host = $1;
         }
-        elsif ($header =~ /^([Xx]-[Aa][Mm][Zz]-.+): *(.+)$/) {
+        elsif ($header =~ /^([Xx]-[Aa][Mm][Zz]-[^:]+): *(.+)$/) {
             my $name = lc $1;
             my $value = $2;
             # merge with existing values
@@ -278,7 +278,7 @@ if (defined $createBucket) {
 
 push @args, @ARGV;
 
-debug("exec $CURL " . join (" ", @args));
+debug("exec $CURL " . join (" ", map { / / && qq/'$_'/ || $_ } @args));
 exec($CURL, @args)  or die "can't exec program: $!";
 
 sub debug {
